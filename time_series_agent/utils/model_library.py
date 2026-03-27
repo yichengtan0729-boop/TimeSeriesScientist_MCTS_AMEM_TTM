@@ -16,6 +16,7 @@ from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.svm import SVR
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.neural_network import MLPRegressor
+from models.registry import discover_plugin_models
 # prophet and tbats are lazily imported inside their predict_* functions
 # to avoid crashing the entire model library when they are not installed.
 
@@ -1230,6 +1231,7 @@ def predict_default(data: Dict[str, Any], params: Dict[str, Any], horizon: int) 
     
     return predictions
 
+
 # Model mapping dictionary
 MODEL_FUNCTIONS = {
     'ARIMA': predict_arima,
@@ -1253,16 +1255,26 @@ MODEL_FUNCTIONS = {
     'PolynomialRegression': predict_polynomial_regression,
     'RidgeRegression': predict_ridge_regression,
     'LassoRegression': predict_lasso_regression,
-    'ElasticNet': predict_elastic_net
+    'ElasticNet': predict_elastic_net,
 }
 
+_PLUGIN_MODELS_CACHE = None
+
+def _get_plugin_models():
+    global _PLUGIN_MODELS_CACHE
+    if _PLUGIN_MODELS_CACHE is None:
+        try:
+            _PLUGIN_MODELS_CACHE = discover_plugin_models()
+            logger.info(f"Loaded plugin models: {sorted(_PLUGIN_MODELS_CACHE.keys())}")
+        except Exception as e:
+            logger.warning(f"Plugin model discovery failed: {e}")
+            _PLUGIN_MODELS_CACHE = {}
+    return _PLUGIN_MODELS_CACHE
+
+
 def get_model_function(model_name: str):
-    """Get the prediction function for a given model name.
-    
-    Args:
-        model_name: Name of the model
-        
-    Returns:
-        Prediction function for the model
-    """
-    return MODEL_FUNCTIONS.get(model_name, predict_default)
+    """Get the prediction function for a given model name."""
+    if model_name in MODEL_FUNCTIONS:
+        return MODEL_FUNCTIONS[model_name]
+    plugin_models = _get_plugin_models()
+    return plugin_models.get(model_name, predict_default)

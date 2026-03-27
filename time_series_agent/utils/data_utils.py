@@ -265,77 +265,104 @@ class DataPreprocessor:
 
 
 class DataSplitter:
-    """Data Splitter for agent framework (validation + test only, no train set)"""
-    
+    """Data Splitter for standard chronological 12/4/4 split."""
+
     @staticmethod
-    def create_slices(df: pd.DataFrame,
-                     num_slices: int,
-                     input_length: int,
-                     horizon: int,
-                     slice_length: Optional[int] = None,
-                     **kwargs) -> List[Dict[str, pd.DataFrame]]:
+    def create_slices(
+        df: pd.DataFrame,
+        num_slices: int,
+        input_length: int,
+        horizon: int,
+        slice_length: Optional[int] = None,
+        **kwargs
+    ) -> List[Dict[str, pd.DataFrame]]:
         """
-        Create data slices for agent framework.
-        Each slice contains only validation (input_length) and test (horizon), no train set.
+        Create one standard chronological train / validation / test split.
 
-        When slice_length is None: use num_slices and input_length; slices are evenly distributed.
-        When slice_length is not None: use it as validation length per slice, and compute
-        num_slices from total data (non-overlapping slices of length slice_length + horizon).
+        Preferred fixed split for ETT-style hourly data:
+            train = 12 * 30 * 24 = 8640
+            val   =  4 * 30 * 24 = 2880
+            test  =  4 * 30 * 24 = 2880
+
+        Preferred fixed split for ETT-style 15-min data:
+            multiply the above by 4
+
+        Fallback:
+            60% / 20% / 20%
         """
-        slices = []
         total_length = len(df)
-        if slice_length is not None:
-            input_length = slice_length
-            # Non-overlapping: each slice uses slice_length + horizon
-            slice_span = input_length + horizon
-            num_slices = max(1, total_length // slice_span)
-        min_required = input_length + horizon
-        if total_length < min_required:
-            raise ValueError(f"Not enough data to create a single slice: need at least {min_required} rows.")
+        if total_length < (input_length + horizon + 10):
+            raise ValueError(
+                f"Not enough data to create slices: total_length={total_length}"
+            )
 
-        if slice_length is not None:
-            stride = input_length + horizon
-            for i in range(num_slices):
-                validation_start = i * stride
-                validation_end = validation_start + input_length
-                test_start = validation_end
-                test_end = test_start + horizon
-                if test_end > total_length:
-                    break
-                validation_data = df.iloc[validation_start:validation_end]
-                test_data = df.iloc[test_start:test_end]
-                slices.append({
-                    'validation': validation_data,
-                    'test': test_data,
-                    'slice_id': i,
-                    'validation_start': validation_start,
-                    'validation_end': validation_end,
-                    'test_start': test_start,
-                    'test_end': test_end,
-                })
-        else:
-            stride = (total_length - min_required) // max(num_slices - 1, 1) if num_slices > 1 else 0
-            for i in range(num_slices):
-                validation_start = i * stride
-                validation_end = validation_start + input_length
-                test_start = validation_end
-                test_end = test_start + horizon
-                if test_end > total_length:
-                    break
-                validation_data = df.iloc[validation_start:validation_end]
-                test_data = df.iloc[test_start:test_end]
-                slices.append({
-                    'validation': validation_data,
-                    'test': test_data,
-                    'slice_id': i,
-                    'validation_start': validation_start,
-                    'validation_end': validation_end,
-                    'test_start': test_start,
-                    'test_end': test_end,
-                })
-        logger.info(f"Created {len(slices)} agent slices")
+        train_len = None
+        val_len = None
+        test_len = None
+
+        # Try fixed 12/4/4 based on datetime frequency
+        if isinstance(df.index, pd.DatetimeIndex) and len(df.index) >= 3:
+            try:
+                diffs = df.index.to_series().diff().dropna()
+                median_diff = diffs.median()
+
+                if pd.notna(median_diff):
+                    # 15-min frequency
+                    if median_diff <= pd.Timedelta(minutes=15):
+                        mult = 4
+                    else:
+                        # treat as hourly-like
+                        mult = 1
+
+                    fixed_train = 12 * 30 * 24 * mult
+                    fixed_val = 4 * 30 * 24 * mult
+                    fixed_test = 4 * 30 * 24 * mult
+
+                    if total_length >= (fixed_train + fixed_val + fixed_test):
+                        train_len = fixed_train
+                        val_len = fixed_val
+                        test_len = fixed_test
+            except Exception:
+                pass
+
+        # fallback
+        if train_len is None:
+            train_len = int(total_length * 0.6)
+            val_len = int(total_length * 0.2)
+            test_len = total_length - train_len - val_len
+
+        if train_len <= 0 or val_len <= 0 or test_len <= 0:
+            raise ValueError(
+                f"Invalid split sizes: train={train_len}, val={val_len}, test={test_len}"
+            )
+
+        train_end = train_len
+        val_end = train_len + val_len
+        test_end = train_len + val_len + test_len
+
+        train_data = df.iloc[:train_end].copy()
+        validation_data = df.iloc[train_end:val_end].copy()
+        test_data = df.iloc[val_end:test_end].copy()
+
+        slices = [{
+            "train": train_data,
+            "validation": validation_data,
+            "test": test_data,
+            "slice_id": 0,
+            "train_start": 0,
+            "train_end": train_end,
+            "validation_start": train_end,
+            "validation_end": val_end,
+            "test_start": val_end,
+            "test_end": test_end,
+        }]
+
+        print("DEBUG slice keys:", list(slices[0].keys()))
+        logger.info(
+            f"Created standard split: "
+            f"train={len(train_data)}, validation={len(validation_data)}, test={len(test_data)}"
+        )
         return slices
-
 
 class DataValidator:
     """Data Validator"""

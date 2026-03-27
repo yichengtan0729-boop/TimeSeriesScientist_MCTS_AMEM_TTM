@@ -33,6 +33,11 @@ from graph.funnel_pipeline import run_funnel
 from config.default_config import DEFAULT_CONFIG
 from utils.progress import set_verbose
 
+from utils.model_library import _get_plugin_models
+
+plugin_models = _get_plugin_models()
+print("DEBUG plugin models loaded:", sorted(plugin_models.keys()))
+
 if __name__ == "__main__":
     print("=" * 60)
     print("TimeSeriesSciensist")
@@ -41,7 +46,7 @@ if __name__ == "__main__":
     # 1. Create and customize config
     config = DEFAULT_CONFIG.copy()
     # Example customizations (edit as needed):
-    config["num_slices"] = 25
+    config["num_slices"] = 1
     config["input_length"] = 512
     config["horizon"] = 96
     config["data_path"] = "dataset/ETTh1.csv"

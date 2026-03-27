@@ -1,0 +1,24 @@
+
+Merged project generated from the user's TimeSeriesScientist_MCTS-main base.
+
+What was merged in:
+- Plugin-based strong models from MCTS_agent-codex-official-sample-based-metrics
+- models/registry.py + models/plugins/
+- New selectable models: AutoARIMA, AutoETS, DLinear, PatchTST, iTransformer, TimesNet
+- Existing URLs / API base / AMEM / TTM / funnel pipeline kept from the user's project
+- Existing 12/4/4 split changes kept from the user's project
+
+Not enabled by default:
+- Chronos
+- MOIRAI
+These heavy foundation plugins were intentionally not copied into the merged project.
+
+Before running, install extra dependencies in your TSci environment:
+    pip install statsforecast neuralforecast
+
+Quick smoke test:
+    python time_series_agent/main.py
+
+What to look for in logs:
+- Loaded plugin models: [...]
+- LLM/MCTS can now choose AutoARIMA / DLinear / PatchTST / iTransformer / TimesNet

@@ -58,3 +58,6 @@ granite-tsfm>=0.2.22
 
 # Semantic memory (AMEM)
 sentence-transformers>=2.6.0
+
+statsforecast>=1.7.0
+neuralforecast>=1.7.0
